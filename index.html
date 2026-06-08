@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Classifier</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- TensorFlow.js & Teachable Machine Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <style>
+        /* Custom animations for the progress bars */
+        .progress-bar-fill {
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans antialiased selection:bg-blue-200 selection:text-blue-900 flex flex-col items-center py-10 px-4 sm:px-6">
+
+    <!-- Header -->
+    <div class="max-w-2xl w-full mb-8 text-center">
+        <h1 class="text-4xl font-extrabold tracking-tight text-gray-900 mb-2">Phân loại ảnh AI</h1>
+        <p class="text-gray-500">Được hỗ trợ bởi TensorFlow.js và Teachable Machine</p>
+    </div>
+
+    <!-- Main Container -->
+    <main class="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        
+        <!-- Status Bar -->
+        <div id="status-bar" class="bg-blue-50 border-b border-blue-100 px-6 py-3 flex items-center transition-colors duration-300">
+            <div id="status-icon" class="mr-3 text-blue-500">
+                <!-- Loading Spinner Icon -->
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+            <span id="status-text" class="text-sm font-medium text-blue-700">Đang tải mô hình AI...</span>
+        </div>
+
+        <div class="p-6 sm:p-10 space-y-8">
+            
+            <!-- Upload Area -->
+            <div id="upload-container" class="relative group transition-all duration-200 pointer-events-none opacity-50">
+                <input type="file" id="file-input" class="hidden" accept="image/jpeg, image/png, image/webp">
+                <div id="dropzone" class="cursor-pointer border-2 border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center justify-center bg-gray-50 hover:bg-blue-50 hover:border-blue-400 transition-colors">
+                    <svg class="w-12 h-12 text-gray-400 group-hover:text-blue-500 mb-4 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
+                    <p class="text-lg font-medium text-gray-700 mb-1">Nhấp hoặc kéo thả ảnh để tải lên</p>
+                    <p class="text-sm text-gray-500">Hỗ trợ JPG, PNG, WEBP</p>
+                </div>
+
+                <!-- Nút Camera -->
+                <div class="flex items-center my-4">
+                    <div class="flex-grow border-t border-gray-200"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">hoặc</span>
+                    <div class="flex-grow border-t border-gray-200"></div>
+                </div>
+                <button id="btn-start-camera" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer border border-blue-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Sử dụng Camera
+                </button>
+            </div>
+
+            <!-- Webcam Area (Hidden initially) -->
+            <div id="webcam-container" class="hidden space-y-4">
+                <div id="webcam-wrapper" class="relative rounded-2xl overflow-hidden bg-black flex items-center justify-center shadow-inner w-full aspect-[4/3] sm:aspect-video">
+                    <!-- Webcam canvas will be injected here -->
+                </div>
+                <div class="flex gap-3">
+                    <button id="btn-capture" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+                        Chụp ảnh
+                    </button>
+                    <button id="btn-cancel-camera" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-xl transition-colors">Hủy</button>
+                </div>
+            </div>
+
+            <!-- Image Preview & Analysis Area (Hidden initially) -->
+            <div id="preview-container" class="hidden space-y-6">
+                <div class="relative rounded-2xl overflow-hidden bg-gray-100 flex items-center justify-center max-h-80 shadow-inner">
+                    <img id="image-preview" class="max-w-full max-h-80 object-contain" src="" alt="Ảnh xem trước">
+                    <button id="btn-reset" class="absolute top-3 right-3 bg-white/90 backdrop-blur text-gray-700 hover:text-red-600 hover:bg-white p-2 rounded-full shadow-md transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Results Section -->
+                <div id="results-container" class="hidden">
+                    <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b pb-2">Kết quả phân tích</h3>
+                    <div id="predictions-list" class="space-y-4">
+                        <!-- Prediction items will be injected here -->
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <script type="text/javascript">
+        // ---------------------------------------------------------
+        // Core Model Setup (Adapted from provided code)
+        // ---------------------------------------------------------
+        const URL = "https://teachablemachine.withgoogle.com/models/JrcPcdbNA/";
+        let model, maxPredictions;
+        let webcam; // Biến cho webcam
+        let isWebcamPlaying = false;
+
+        // UI Elements
+        const statusBar = document.getElementById('status-bar');
+        const statusIcon = document.getElementById('status-icon');
+        const statusText = document.getElementById('status-text');
+        const uploadContainer = document.getElementById('upload-container');
+        const fileInput = document.getElementById('file-input');
+        const dropzone = document.getElementById('dropzone');
+        
+        // Webcam UI Elements
+        const btnStartCamera = document.getElementById('btn-start-camera');
+        const webcamContainer = document.getElementById('webcam-container');
+        const webcamWrapper = document.getElementById('webcam-wrapper');
+        const btnCapture = document.getElementById('btn-capture');
+        const btnCancelCamera = document.getElementById('btn-cancel-camera');
+
+        const previewContainer = document.getElementById('preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const resultsContainer = document.getElementById('results-container');
+        const predictionsList = document.getElementById('predictions-list');
+        const btnReset = document.getElementById('btn-reset');
+
+        // State Management UI function
+        function setStatus(state, message) {
+            statusText.innerText = message;
+            statusBar.className = 'px-6 py-3 flex items-center transition-colors duration-300 border-b ';
+            statusIcon.innerHTML = '';
+
+            if (state === 'loading') {
+                statusBar.classList.add('bg-blue-50', 'border-blue-100');
+                statusText.classList.add('text-blue-700');
+                statusIcon.innerHTML = `<svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+            } else if (state === 'ready') {
+                statusBar.classList.add('bg-green-50', 'border-green-100');
+                statusText.classList.add('text-green-700');
+                statusIcon.innerHTML = `<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            } else if (state === 'error') {
+                statusBar.classList.add('bg-red-50', 'border-red-100');
+                statusText.classList.add('text-red-700');
+                statusIcon.innerHTML = `<svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            }
+        }
+
+        // Initialize and load the model on startup
+        async function init() {
+            try {
+                setStatus('loading', 'Đang tải mô hình AI (có thể mất vài giây)...');
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+
+                // Load the model and metadata
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+                
+                setStatus('ready', 'Mô hình đã tải xong. Sẵn sàng nhận ảnh!');
+                
+                // Enable upload UI
+                uploadContainer.classList.remove('pointer-events-none', 'opacity-50');
+            } catch (error) {
+                console.error("Error loading model:", error);
+                setStatus('error', 'Không thể tải mô hình. Kiểm tra console để biết chi tiết.');
+            }
+        }
+
+        // Run prediction on the selected image
+        async function predict() {
+            if (!model) return;
+            
+            setStatus('loading', 'Đang phân tích ảnh cục bộ...');
+            resultsContainer.classList.add('hidden');
+            predictionsList.innerHTML = '';
+
+            try {
+                // The Teachable Machine predict() function works with an <img> element
+                const predictions = await model.predict(imagePreview);
+                
+                // Sort predictions by probability (highest first)
+                predictions.sort((a, b) => b.probability - a.probability);
+                
+                // Slice to get only the Top-5 predictions
+                const top5 = predictions.slice(0, 5);
+                
+                renderResults(top5);
+                setStatus('ready', 'Phân tích hoàn tất.');
+            } catch (error) {
+                console.error("Error predicting:", error);
+                setStatus('error', 'Đã xảy ra lỗi trong quá trình phân tích.');
+            }
+        }
+
+        // Render sorted predictions to the DOM with animations
+        function renderResults(predictions) {
+            predictionsList.innerHTML = '';
+            
+            predictions.forEach((pred, index) => {
+                const probability = (pred.probability * 100).toFixed(1);
+                const isTop1 = index === 0;
+                
+                // Styling for Top 1 vs others
+                const bgColors = isTop1 ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-400';
+                const containerClass = isTop1 ? 'bg-blue-50/50 border-blue-100 border p-4 rounded-xl shadow-sm' : 'px-4';
+                const labelClass = isTop1 ? 'font-bold text-gray-900 text-lg' : 'font-medium text-gray-700 text-sm';
+                const valClass = isTop1 ? 'font-bold text-indigo-600 text-lg' : 'font-medium text-gray-600 text-sm';
+                const barHeight = isTop1 ? 'h-3' : 'h-1.5';
+                
+                const itemHtml = `
+                    <div class="${containerClass}">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center">
+                                ${isTop1 ? `<svg class="w-5 h-5 text-yellow-400 mr-2 drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>` : ''}
+                                <span class="${labelClass}">${pred.className}</span>
+                            </div>
+                            <span class="${valClass}">${probability}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full overflow-hidden ${barHeight}">
+                            <div class="progress-bar-fill ${bgColors} h-full rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add to DOM
+                predictionsList.insertAdjacentHTML('beforeend', itemHtml);
+                
+                // Trigger animation on next frame
+                setTimeout(() => {
+                    const bars = predictionsList.querySelectorAll('.progress-bar-fill');
+                    bars[index].style.width = `${probability}%`;
+                }, 50);
+            });
+            
+            resultsContainer.classList.remove('hidden');
+        }
+
+        // ---------------------------------------------------------
+        // File Handling & Interactions
+        // ---------------------------------------------------------
+
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Vui lòng tải lên một tệp hình ảnh hợp lệ (JPG, PNG).');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Set image source
+                imagePreview.src = e.target.result;
+                
+                // Toggle UI states
+                uploadContainer.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                
+                // Wait for image to render completely before predicting
+                imagePreview.onload = () => {
+                    predict();
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Click to upload
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        // Drag and Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('border-blue-500', 'bg-blue-50'));
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('border-blue-500', 'bg-blue-50'));
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length) handleFile(files[0]);
+        });
+
+        // ---------------------------------------------------------
+        // Webcam Camera Handling
+        // ---------------------------------------------------------
+
+        async function webcamLoop() {
+            if (isWebcamPlaying && webcam) {
+                webcam.update(); // cập nhật khung hình webcam
+                window.requestAnimationFrame(webcamLoop);
+            }
+        }
+
+        btnStartCamera.addEventListener('click', async () => {
+            uploadContainer.classList.add('hidden');
+            webcamContainer.classList.remove('hidden');
+            setStatus('loading', 'Đang kết nối với camera...');
+
+            try {
+                if (!webcam) {
+                    const flip = true; 
+                    webcam = new tmImage.Webcam(400, 400, flip); // width, height, flip
+                    await webcam.setup(); // yêu cầu quyền truy cập
+                }
+                await webcam.play();
+                isWebcamPlaying = true;
+                window.requestAnimationFrame(webcamLoop);
+
+                webcamWrapper.innerHTML = ''; // Xóa nội dung cũ
+                webcamWrapper.appendChild(webcam.canvas);
+                webcam.canvas.classList.add('max-w-full', 'max-h-full', 'object-cover', 'rounded-2xl');
+
+                setStatus('ready', 'Camera đã sẵn sàng. Hãy điều chỉnh góc máy!');
+            } catch (error) {
+                console.error("Lỗi camera:", error);
+                setStatus('error', 'Không thể truy cập camera. Vui lòng cấp quyền trong trình duyệt.');
+                uploadContainer.classList.remove('hidden');
+                webcamContainer.classList.add('hidden');
+            }
+        });
+
+        btnCapture.addEventListener('click', () => {
+            if (!webcam || !isWebcamPlaying) return;
+            
+            // Lấy dữ liệu ảnh từ canvas của webcam
+            const imageDataUrl = webcam.canvas.toDataURL('image/png');
+            
+            // Dừng webcam
+            webcam.stop();
+            isWebcamPlaying = false;
+            
+            // Chuyển đổi giao diện
+            webcamContainer.classList.add('hidden');
+            imagePreview.src = imageDataUrl;
+            previewContainer.classList.remove('hidden');
+            
+            // Đợi ảnh load vào thẻ img rồi chạy dự đoán
+            imagePreview.onload = () => predict();
+        });
+
+        btnCancelCamera.addEventListener('click', () => {
+            if (webcam) {
+                webcam.stop();
+                isWebcamPlaying = false;
+            }
+            webcamContainer.classList.add('hidden');
+            uploadContainer.classList.remove('hidden');
+            setStatus('ready', 'Sẵn sàng nhận ảnh!');
+        });
+
+        // Reset App State
+        btnReset.addEventListener('click', () => {
+            fileInput.value = '';
+            imagePreview.src = '';
+            
+            if (webcam && isWebcamPlaying) {
+                webcam.stop();
+                isWebcamPlaying = false;
+            }
+
+            uploadContainer.classList.remove('hidden');
+            previewContainer.classList.add('hidden');
+            webcamContainer.classList.add('hidden');
+            
+            setStatus('ready', 'Sẵn sàng nhận ảnh mới!');
+        });
+
+        // Auto-initialize on page load
+        window.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
